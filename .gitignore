@@ -1,0 +1,18 @@
+# Dependencies & local runtime
+node_modules/
+.convex/
+.DS_Store
+
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+.cursor/skills/**/secrets.local.env
+.cursor/skills/**/secrets.env
+
+# Uploads & archives
+public/uploads/
+*.zip
+
+# Editor noise
+.cursor/*.log
