@@ -76,6 +76,17 @@ a { color: inherit; }
 .stat { position: relative; min-height: 150px; padding: 20px; background: var(--ivory); border: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .stat span { position: absolute; top: 20px; left: 20px; right: 20px; color: var(--muted); font-size: 9px; letter-spacing: .13em; text-transform: uppercase; }
 .stat b { font: 400 48px/.8 var(--serif); }
+.analytics-overview { padding: 28px; background: var(--ivory); border: 1px solid var(--line); }
+.analytics-overview .panel-title { align-items: center; justify-content: center; text-align: center; flex-direction: column; gap: 8px; }
+.analytics-note { margin: 18px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.analytics-columns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 24px; margin-top: 28px; }
+.analytics-columns .panel { margin: 0; padding: 24px; background: var(--ivory); border: 1px solid var(--line); }
+.analytics-ranking ol { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.analytics-ranking li { display: grid; grid-template-columns: 32px minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--line); }
+.analytics-ranking li>span { color: var(--muted); font-size: 9px; letter-spacing: .1em; }
+.analytics-ranking li>b { min-width: 0; overflow-wrap: anywhere; font-size: 12px; font-weight: 600; }
+.analytics-ranking li>strong { color: var(--accent); font: 400 26px/.9 var(--serif); text-align: right; }
+.analytics-ranking li small { display: block; margin-top: 5px; color: var(--muted); font: 9px var(--sans); letter-spacing: .08em; text-transform: uppercase; }
 .posts-table { width: 100%; border-collapse: collapse; background: var(--ivory); }
 .posts-table th, .posts-table td { padding: 15px 16px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 .posts-table th { color: var(--muted); font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
@@ -177,6 +188,7 @@ a { color: inherit; }
   .sidebar-bottom { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 0 0; margin-top: 14px; }
   .sidebar-bottom button { margin: 0; }
   .admin-main { padding-top: 32px; }
+  .analytics-columns { grid-template-columns: 1fr; }
 }
 @media (max-width: 680px) {
   .login-card { padding: 30px 22px; }

@@ -9,6 +9,7 @@ import { ConvexHttpClient } from "convex/browser";
 import { api } from "./convex/_generated/api.js";
 import { renderMarkdown, escapeHtml } from "./markdown.mjs";
 import { analyzeSeo } from "./seo-analysis.js";
+import { createVisitorAnalytics } from "./visitor-analytics.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8765);
@@ -19,6 +20,9 @@ const UPLOAD_DIR = path.join(ROOT, "public", "uploads", "blog");
 const MAX_JSON_BYTES = 1_200_000;
 const MAX_UPLOAD_BYTES = 6_000_000;
 const AGENT_TOKEN_SERVICE = "thecomma-agent-publishing-token";
+const ANALYTICS_TOKEN_SERVICE = "cloudflare-analytics-api-token";
+const ANALYTICS_COOKIE = "thecomma_visitor_id";
+const ANALYTICS_ZONE_ID = "2c56e303ab174a6adc40ae0cfa2b50bb";
 
 function readEnvFile() {
   const values = {};
@@ -70,6 +74,8 @@ function readKeychainToken(service) {
 }
 
 const AGENT_PUBLISHING_TOKEN = process.env.AGENT_PUBLISHING_TOKEN || envFile.AGENT_PUBLISHING_TOKEN || readKeychainToken(AGENT_TOKEN_SERVICE);
+const CLOUDFLARE_ANALYTICS_TOKEN = process.env.CLOUDFLARE_ANALYTICS_TOKEN || envFile.CLOUDFLARE_ANALYTICS_TOKEN || readKeychainToken(ANALYTICS_TOKEN_SERVICE);
+const visitorAnalytics = createVisitorAnalytics({ rootDir: ROOT, zoneId: ANALYTICS_ZONE_ID, token: CLOUDFLARE_ANALYTICS_TOKEN });
 
 function json(res, status, payload, extraHeaders = {}) {
   const body = JSON.stringify(payload);
@@ -551,7 +557,7 @@ function storyIndexHtml(posts) {
 <main>
 <section class="journal-hero"><div class="journal-hero-inner"><p class="journal-kicker">THE COMMA / INGREDIENT JOURNAL</p><h1>Mỗi món có một câu chuyện.<br><em>Mỗi mùa có một cách kể.</em></h1><p>Những bài mới nhất được xuất bản từ studio nội dung The Comma, gọn, rõ và bám đúng nguyên liệu đã xác nhận.</p><div class="journal-filter-note">${posts.length} bài · Cà phê · Trà · Matcha · Season</div></div></section>
 <section class="journal-index"><div class="journal-index-grid">${cards || '<div class="empty-state">Chưa có bài nào được xuất bản.</div>'}</div></section>
-</main></body></html>`;
+</main><script src="/visitor-stats.js?v=20260803-cloudflare-v1"></script></body></html>`;
 }
 
 function storyArticleHtml(post, posts) {
@@ -588,7 +594,7 @@ function storyArticleHtml(post, posts) {
 <header class="article-hero"><div class="article-hero-copy"><p class="journal-kicker">${escapeHtml(storyCategoryLabel(post.category))} / THE COMMA</p><h1>${escapeHtml(post.title)}</h1><p class="article-excerpt">${escapeHtml(storyMetaDescription(post))}</p>${ingredients}</div><figure class="article-hero-media"><img src="${escapeHtml(storyImage(post))}" alt="${escapeHtml(post.title)} — The Comma"></figure></header>
 <section class="article-layout"><article class="article-body">${renderMarkdown(post.content)}</article></section>
 ${relatedHtml}
-</main></body></html>`;
+</main><script src="/visitor-stats.js?v=20260803-cloudflare-v1"></script></body></html>`;
 }
 
 async function publishStoriesSite(posts) {
@@ -676,6 +682,23 @@ function clearLoginFailures(ip) {
 }
 
 async function handleApi(req, res, url) {
+  if (url.pathname === "/api/visitor-stats" && ["GET", "POST"].includes(req.method)) {
+    const cookieVisitorId = parseCookies(req)[ANALYTICS_COOKIE];
+    const visitorId = /^[a-zA-Z0-9-]{12,}$/.test(cookieVisitorId || "") ? cookieVisitorId : randomUUID();
+    const body = req.method === "POST" ? await readJson(req) : {};
+    const event = body.event === "heartbeat" ? "heartbeat" : req.method === "POST" ? "pageview" : "read";
+    const headers = cookieVisitorId === visitorId ? {} : {
+      "Set-Cookie": `${ANALYTICS_COOKIE}=${encodeURIComponent(visitorId)}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax${isSecureRequest(req) ? "; Secure" : ""}`,
+    };
+    return json(res, 200, await visitorAnalytics.getPublicStats({ visitorId, event }), headers);
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/admin/stats") {
+    const admin = await requireAdmin(req, res);
+    if (!admin) return;
+    return json(res, 200, await visitorAnalytics.getAdminStats());
+  }
+
   if (req.method === "OPTIONS") return text(res, 204, "");
   if (!sameOrigin(req)) return json(res, 403, { error: "Origin not allowed." });
 
@@ -1236,6 +1259,8 @@ server.listen(PORT, HOST, () => {
   console.log(`Convex local backend configured at ${CONVEX_URL}`);
   tickScheduledPublishing();
   setInterval(tickScheduledPublishing, SCHEDULE_TICK_MS).unref();
+  visitorAnalytics.syncTopPages().catch((error) => console.error("Analytics sync failed:", errorMessage(error)));
+  setInterval(() => visitorAnalytics.syncTopPages().catch((error) => console.error("Analytics sync failed:", errorMessage(error))), 5 * 60_000).unref();
 });
 
 function shutdown(signal) {

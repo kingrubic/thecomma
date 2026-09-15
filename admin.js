@@ -6,6 +6,7 @@ const state = {
   user: null,
   posts: [],
   categories: [],
+  analytics: null,
   view: "overview",
   editing: null,
   busy: false,
@@ -30,6 +31,10 @@ function esc(value = "") {
 function dateLabel(value) {
   if (!value) return "—";
   return new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium" }).format(new Date(value));
+}
+
+function formatCount(value) {
+  return new Intl.NumberFormat("vi-VN").format(Number(value) || 0);
 }
 
 function dateInputValue(value) {
@@ -200,6 +205,7 @@ function sidebar(active) {
       <div class="sidebar-menu" id="sidebar-menu">
         <nav class="sidebar-nav" aria-label="Quản trị">
         <button data-view="overview" class="${active === "overview" ? "active" : ""}">Tổng quan</button>
+        <button data-view="analytics" class="${active === "analytics" ? "active" : ""}">Thống kê truy cập</button>
         <button data-view="stories" class="${active === "stories" ? "active" : ""}">Stories</button>
         <button data-view="editor" class="${active === "editor" ? "active" : ""}">Viết bài mới</button>
         <button data-view="categories" class="${active === "categories" ? "active" : ""}">Quản lý chuyên mục</button>
@@ -231,6 +237,21 @@ function overviewView() {
     <section class="panel"><div class="panel-title"><h2>Mới cập nhật</h2><span>${state.posts.length ? "Theo thứ tự chỉnh sửa gần nhất" : "Chưa có bài trong studio"}</span></div>
       ${recent.length ? postsTable(recent) : '<div class="empty-state">Bắt đầu bằng một story đầu tiên. Nội dung xuất bản sẽ tự xuất hiện tại /stories.</div>'}
     </section>`);
+}
+
+function topPagesHtml(title, pages = [], emptyText = "Chưa có dữ liệu.") {
+  return `<section class="panel analytics-ranking"><div class="panel-title"><div><p class="eyebrow">TOP PAGES</p><h2>${esc(title)}</h2></div></div>${pages.length ? `<ol>${pages.map((page, index) => `<li><span>${String(index + 1).padStart(2, "0")}</span><b>${esc(page.path)}</b><strong>${formatCount(page.visits)}<small>visits</small></strong></li>`).join("")}</ol>` : `<div class="empty-state">${esc(emptyText)}</div>`}</section>`;
+}
+
+function analyticsView() {
+  const data = state.analytics;
+  const stats = data?.stats || {};
+  return shell("Thống kê truy cập.", "Dữ liệu page views lấy trực tiếp từ Cloudflare; khách online được tính trong 5 phút gần nhất.", `
+    <section class="panel analytics-overview"><div class="panel-title"><div><p class="eyebrow">CLOUDFLARE ANALYTICS</p><h2>Tổng quan truy cập</h2></div><span>${data ? "Tự cập nhật mỗi 5 phút" : "Đang tải dữ liệu…"}</span></div>
+      <div class="stats-grid"><div class="stat"><span>Page views 30 ngày</span><b>${formatCount(stats.totalVisits)}</b></div><div class="stat"><span>Page views hôm nay</span><b>${formatCount(stats.todayVisits)}</b></div><div class="stat"><span>Khách đang online</span><b>${formatCount(stats.onlineVisitors)}</b></div></div>
+      <p class="analytics-note">Hôm nay tính theo giờ Việt Nam (GMT+7). Top tháng được lưu theo snapshot Cloudflare và cộng dồn từng ngày.</p>
+    </section>
+    <div class="analytics-columns">${topPagesHtml("Top pages hôm nay", data?.topPagesToday, "Chưa có page view hôm nay.")}${topPagesHtml(`Top pages tháng này${data?.monthKey ? ` (${data.monthKey})` : ""}`, data?.topPagesMonth, "Đang chờ snapshot đầu tiên.")}</div>`);
 }
 
 function postsTable(posts) {
@@ -334,6 +355,7 @@ function render() {
   if (!state.user) return loginView();
   if (state.user.mustChangePassword) return requiredPasswordChangeView();
   if (state.view === "stories") app.innerHTML = postsView();
+  else if (state.view === "analytics") app.innerHTML = analyticsView();
   else if (state.view === "editor") app.innerHTML = editorView();
   else if (state.view === "categories") app.innerHTML = categoriesView();
   else if (state.view === "settings") app.innerHTML = settingsView();
@@ -366,6 +388,7 @@ function bindShellEvents() {
     state.user = null;
     state.posts = [];
     state.categories = [];
+    state.analytics = null;
     render();
   });
   document.querySelector("[data-publish-stories]")?.addEventListener("click", async (event) => {
@@ -718,8 +741,12 @@ async function loadCategories() {
   state.categories = result.categories || [];
 }
 
+async function loadAnalytics() {
+  state.analytics = await apiRequest("/api/admin/stats");
+}
+
 async function loadAdminData() {
-  await Promise.all([loadPosts(), loadCategories()]);
+  await Promise.all([loadPosts(), loadCategories(), loadAnalytics()]);
 }
 
 async function init() {
@@ -734,3 +761,12 @@ async function init() {
 }
 
 init();
+setInterval(async () => {
+  if (!state.user || state.user.mustChangePassword) return;
+  try {
+    await loadAnalytics();
+    if (state.view === "analytics") render();
+  } catch {
+    // Keep the last successful snapshot visible when Cloudflare is temporarily unavailable.
+  }
+}, 5 * 60_000);

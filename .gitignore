@@ -14,5 +14,8 @@ node_modules/
 public/uploads/
 *.zip
 
+# Runtime analytics snapshots (persistent local data, never commit)
+data/*.json
+
 # Editor noise
 .cursor/*.log
